@@ -297,7 +297,7 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
+UCTNode* UCTNode::uct_select_child(int color, bool is_root,int movenum) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -320,7 +320,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
     auto best_value = std::numeric_limits<double>::lowest();
-
+	auto count = 0;
     for (auto& child : m_children) {
         if (!child.active()) {
             continue;
@@ -334,21 +334,29 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        const auto psa = child.get_policy();
+        auto psa = child.get_policy();
         const auto denom = 1.0 + child.get_visits();
         const auto puct = cfg_puct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
+		count++;
+		if (count > 19) { break; }
+
+		if (movenum <8 && psa <0.9 ) {
+			if(child.get_visits() > get_visits() *0.07) { continue; }
+		}
 
         if (value > best_value) {
             best_value = value;
             best = &child;
         }
+	
     }
 
-    assert(best != nullptr);
-    best->inflate();
-    return best->get();
+	assert(best != nullptr);
+	if (best == nullptr) { best = &(m_children[0]); }
+	best->inflate();
+	return best->get();
 }
 
 class NodeComp : public std::binary_function<UCTNodePointer&,
